@@ -1,0 +1,11 @@
+# Increase maximum file upload size to 100MB (adjust as needed)
+client_max_body_size 1000M;
+
+# Handle /.well-known/caldav and /.well-known/carddav for Nextcloud
+location /.well-known/carddav {
+    return 301 $scheme://$host/remote.php/dav;
+}
+
+location /.well-known/caldav {
+    return 301 $scheme://$host/remote.php/dav;
+}

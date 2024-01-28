@@ -1,0 +1,112 @@
+version: '3'
+
+services:
+  # Nextcloud service
+  nextcloud:
+    image: nextcloud
+    container_name: nextcloud
+    depends_on:
+      - nginx-proxy
+      - acme-companion
+      - db
+    volumes:
+      - ${NEXTCLOUD_DATA_PATH}:/var/www/html
+    environment:
+      # Database Access
+      - MYSQL_HOST=db
+      - MYSQL_DATABASE=nextcloud
+      - MYSQL_USER=nextcloud
+      - MYSQL_PASSWORD=${DATABASE_PASSWORD}
+
+      # Domain for nginx and Letsencrypt
+      - VIRTUAL_HOST=${NEXTCLOUD_DOMAIN}
+      - LETSENCRYPT_HOST=${NEXTCLOUD_DOMAIN}
+      - LETSENCRYPT_EMAIL=${LETSENCRYPT_EMAIL}
+
+      # Nextcloud
+      - NEXTCLOUD_TRUSTED_DOMAINS=${NEXTCLOUD_DOMAIN}
+      - OVERWRITEPROTOCOL=https
+      - TRUSTED_PROXIES=nginx-proxy
+    networks:
+      - internal_network
+    restart: always
+
+  # Database service
+  db:
+    image: mariadb
+    container_name: nextclouddb
+    volumes:
+      - ${NEXTCLOUD_DB_PATH}:/var/lib/mysql
+    environment:
+      - MARIADB_AUTO_UPGRADE=1
+      - MYSQL_ROOT_PASSWORD=${DATABASE_ROOT_PASSWORD}
+      - MYSQL_DATABASE=nextcloud
+      - MYSQL_USER=nextcloud
+      - MYSQL_PASSWORD=${DATABASE_PASSWORD}
+    networks:
+      - internal_network
+    restart: always
+
+  # Nginx reverse proxy service
+  nginx-proxy:
+    image: jwilder/nginx-proxy:alpine
+    container_name: nginx-proxy
+    ports:
+      # HTTP Port for 301 - Permanently moved
+      - "80:80"
+
+      # HTTPS Port to proxy to server
+      - "443:443"
+    networks:
+      - internal_network
+    volumes:
+      # Socket to get events about new Containers to be proxied to
+      - /var/run/docker.sock:/tmp/docker.sock:ro
+
+      # Volume with the Certificate from acme-companion
+      - certs:/etc/nginx/certs:ro
+
+      # nginx configuration
+      - vhost.d:/etc/nginx/vhost.d
+      - ./default.conf:/etc/nginx/vhost.d/default:rw
+      - conf.d:/etc/nginx/conf.d
+
+      # ACME Challenge data
+      - html:/usr/share/nginx/html
+    environment:
+      - DEFAULT_HOST=default.local
+      - TRUST_DOWNSTREAM_PROXY=false
+
+  # Let's Encrypt companion service
+  acme-companion:
+    image: nginxproxy/acme-companion
+    container_name: cert-acme-companion
+    depends_on:
+      - nginx-proxy
+    volumes:
+      # Socket to get events about new Containers to obtain certificates from
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
+      # Volume with the Certificate
+      - certs:/etc/nginx/certs:rw
+
+      # nginx configuration
+      - vhost.d:/etc/nginx/vhost.d
+      - ./default.conf:/etc/nginx/vhost.d/default:rw
+
+      # Challenge & State
+      - html:/usr/share/nginx/html
+      - acme:/etc/acme.sh
+    environment:
+      - NGINX_PROXY_CONTAINER=nginx-proxy
+
+volumes:
+  certs:
+  vhost.d:
+  html:
+  conf.d:
+  acme:
+
+networks:
+  internal_network:
+    driver: bridge
