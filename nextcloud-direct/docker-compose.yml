@@ -21,7 +21,6 @@ services:
 
       # Nextcloud
       - NEXTCLOUD_TRUSTED_DOMAINS=${NEXTCLOUD_DOMAIN}
-      - OVERWRITEPROTOCOL=https
     networks:
       - internal_network
     restart: always
