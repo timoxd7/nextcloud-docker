@@ -6,13 +6,11 @@ services:
     image: nextcloud
     container_name: nextcloud
     depends_on:
+      - nginx-proxy
       - db
       - redis
     volumes:
       - ${NEXTCLOUD_DATA_PATH}:/var/www/html
-    ports:
-      # HTTP Port
-      - "80:80"
     environment:
       # Database Access
       - MYSQL_HOST=db
@@ -24,8 +22,12 @@ services:
       - REDIS_HOST=redis
       - REDIS_HOST_PASSWORD=${REDIS_PASSWORD}
 
+      # Domain for nginx and Letsencrypt
+      - VIRTUAL_HOST=${NEXTCLOUD_DOMAIN}
+
       # Nextcloud
       - NEXTCLOUD_TRUSTED_DOMAINS=${NEXTCLOUD_DOMAIN}
+      - TRUSTED_PROXIES=nginx-proxy
     networks:
       - internal_network
     restart: unless-stopped
@@ -66,6 +68,33 @@ services:
     networks:
       - internal_network
     restart: unless-stopped
+
+  # Nginx reverse proxy service
+  nginx-proxy:
+    image: jwilder/nginx-proxy:alpine
+    container_name: nginx-proxy
+    user: "1004:1010"
+    ports:
+      # HTTP Port
+      - "80:80"
+    networks:
+      - internal_network
+    volumes:
+      # Socket to get events about new Containers to be proxied to
+      - /var/run/docker.sock:/tmp/docker.sock:ro
+
+      # nginx configuration
+      - vhost.d:/etc/nginx/vhost.d
+      - ./default.conf:/etc/nginx/vhost.d/default:rw
+      - conf.d:/etc/nginx/conf.d
+    environment:
+      - DEFAULT_HOST=default.local
+      - TRUST_DOWNSTREAM_PROXY=false
+      - HTTPS_METHOD=nohttps
+
+volumes:
+  vhost.d:
+  conf.d:
 
 networks:
   internal_network:
